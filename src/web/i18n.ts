@@ -112,6 +112,8 @@ const RU: Record<string, string> = {
     'Введите код, который придёт в приложение Telegram (и облачный пароль, если он задан).',
   'Phone': 'Телефон',
   'e.g. oman': 'напр. oman',
+  'api_id is a short number (usually 5-8 digits) from my.telegram.org, not a phone number.':
+    'api_id — короткое число (обычно 5–8 цифр) с my.telegram.org, а не номер телефона.',
   'Get code': 'Получить код',
   'Copy api_id (digits) and api_hash (32 characters) from my.telegram.org → API development tools.':
     'Скопируйте api_id (цифры) и api_hash (32 символа) с my.telegram.org → API development tools.',

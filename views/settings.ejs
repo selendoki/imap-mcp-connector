@@ -168,9 +168,9 @@
       <div class="links tg">
         <span class="muted"><%= t('Label (optional)') %></span><span class="muted">api_id</span><span class="muted">api_hash</span><span class="muted"><%= t('Phone') %></span>
         <input name="label" placeholder="<%= t('e.g. oman') %>">
-        <input name="api_id" inputmode="numeric" required>
-        <input name="api_hash" required>
-        <input name="phone" type="tel" placeholder="+96871113813" required>
+        <input name="api_id" inputmode="numeric" autocomplete="off" maxlength="10" required>
+        <input name="api_hash" autocomplete="off" spellcheck="false" required>
+        <input name="phone" type="tel" placeholder="+968XXXXXXXX" required>
       </div>
       <button><%= t('Get code') %></button>
     </form>

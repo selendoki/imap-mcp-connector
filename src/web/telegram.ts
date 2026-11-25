@@ -99,6 +99,9 @@ export function telegramRouter(deps: AppDeps, render: SettingsRenderer): Router 
     const apiId = Number(b.api_id);
     const apiHash = (b.api_hash ?? '').trim();
     const phone = (b.phone ?? '').replace(/[\s()-]/g, '');
+    if (Number.isInteger(apiId) && apiId > 2147483647) {
+      return fail(req, res, 'api_id is a short number (usually 5-8 digits) from my.telegram.org, not a phone number.');
+    }
     if (!Number.isInteger(apiId) || apiId <= 0 || !/^[0-9a-f]{32}$/i.test(apiHash)) {
       return fail(req, res, 'Copy api_id (digits) and api_hash (32 characters) from my.telegram.org → API development tools.');
     }
