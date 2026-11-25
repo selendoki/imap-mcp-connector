@@ -42,6 +42,8 @@ export type LoginResult =
   | { status: 'error'; message: string };
 
 const TOO_MANY = 'Too many sign-in attempts. Try again in 15 minutes.';
+const TOO_MANY_FOR_EMAIL =
+  'The mail server rejected the password for this address 5 times in a row, so sign-in is paused for 15 minutes. Check the password (or app password) first, then try again.';
 const UNAPPROVED_SERVER =
   "This instance only uses mail servers it can detect automatically or that the administrator listed in ALLOWED_IMAP_HOSTS, and yours is neither. Ask the administrator to add your IMAP server.";
 const BAD_CREDENTIALS =
@@ -58,10 +60,10 @@ export async function login(deps: LoginDeps, input: LoginInput): Promise<LoginRe
   const emailKey = `email:${email}`;
 
   // Checked before discovery so throttled clients cannot make the server hammer ISPDB/DNS.
-  if (
-    loginFailuresSince(deps.db, ipKey, since) >= MAX_FAILURES_PER_IP ||
-    loginFailuresSince(deps.db, emailKey, since) >= MAX_FAILURES_PER_EMAIL
-  ) {
+  if (loginFailuresSince(deps.db, emailKey, since) >= MAX_FAILURES_PER_EMAIL) {
+    return { status: 'error', message: TOO_MANY_FOR_EMAIL };
+  }
+  if (loginFailuresSince(deps.db, ipKey, since) >= MAX_FAILURES_PER_IP) {
     return { status: 'error', message: TOO_MANY };
   }
 

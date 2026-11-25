@@ -134,7 +134,10 @@ const RU: Record<string, string> = {
   'The request could not be processed.': 'Запрос не удалось обработать.',
   // messages from sign-in and checks
   'Enter your email address and password.': 'Введите адрес и пароль.',
-  'Too many sign-in attempts. Try again in 15 minutes.': 'Слишком много попыток входа. Попробуйте через 15 минут.',
+  'Too many sign-in attempts. Try again in 15 minutes.':
+    'Слишком много неудачных попыток входа с этого устройства. Попробуйте через 15 минут.',
+  'The mail server rejected the password for this address 5 times in a row, so sign-in is paused for 15 minutes. Check the password (or app password) first, then try again.':
+    'Почтовый сервер 5 раз подряд не принял пароль для этого адреса, поэтому вход приостановлен на 15 минут. Сначала проверьте пароль (или пароль приложения), потом попробуйте снова.',
   'Email or password incorrect. Many providers (Gmail, iCloud, Yahoo) require an app password instead of your normal password.':
     'Неверный адрес или пароль. Gmail, iCloud, Yahoo и другие требуют пароль приложения вместо обычного.',
   "Couldn't reach your mail server. Check the settings or try again shortly.":

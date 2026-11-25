@@ -72,7 +72,7 @@ describe('login', () => {
     const d = deps();
     for (let i = 0; i < 5; i++) await login(d, { ...input, password: 'wrong', ip: `10.0.0.${i}` });
     const r = await login(d, { ...input, ip: '9.9.9.9' });
-    expect(r).toEqual({ status: 'error', message: expect.stringMatching(/Too many/) });
+    expect(r).toEqual({ status: 'error', message: expect.stringMatching(/rejected the password for this address 5 times/) });
     expect(d.verifyImap).toHaveBeenCalledTimes(5);
   });
 
@@ -158,7 +158,7 @@ describe('login', () => {
     for (let i = 0; i < 5; i++) await login(d, { ...input, password: 'wrong', ip: `10.0.0.${i}` });
     expect(d.discover).toHaveBeenCalledTimes(5);
     const r = await login(d, { ...input, ip: '9.9.9.9' });
-    expect(r).toEqual({ status: 'error', message: expect.stringMatching(/Too many/) });
+    expect(r).toEqual({ status: 'error', message: expect.stringMatching(/rejected the password for this address 5 times/) });
     expect(d.discover).toHaveBeenCalledTimes(5);
   });
 
