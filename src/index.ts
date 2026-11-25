@@ -40,7 +40,7 @@ const app = createApp({
   smtpFactory: defaultSmtpFactory,
   discover: (email) => discoverSettings(email),
   verifyImap: (target, password) => verifyImapLogin(target, password),
-  guard: (email, settings) => guardMailSettings(config, email, settings),
+  guard: (email, settings, linked) => guardMailSettings(config, email, settings, undefined, linked),
   mailGuard,
 });
 

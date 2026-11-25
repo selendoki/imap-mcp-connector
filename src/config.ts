@@ -4,6 +4,11 @@ export interface Config {
   sessionSecret: string;
   allowedEmailDomains: string[];
   allowedImapHosts: string[];
+  /** Extra email domains that may only be added as linked mailboxes by a signed-in user, never used to sign in. */
+  linkedEmailDomains: string[];
+  /** Extra IMAP hosts allowed for linked mailboxes only. */
+  linkedImapHosts: string[];
+  maxLinkedMailboxes: number;
   allowPrivateHosts: boolean;
   defaultSendLimitPerHour: number;
   dataDir: string;
@@ -69,6 +74,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     sessionSecret: env.SESSION_SECRET,
     allowedEmailDomains,
     allowedImapHosts,
+    linkedEmailDomains: list(env.LINKED_EMAIL_DOMAINS),
+    linkedImapHosts: list(env.LINKED_IMAP_HOSTS),
+    maxLinkedMailboxes: positiveInt('MAX_LINKED_MAILBOXES', env.MAX_LINKED_MAILBOXES, 20),
     allowPrivateHosts: env.ALLOW_PRIVATE_HOSTS === 'true',
     defaultSendLimitPerHour: positiveInt('DEFAULT_SEND_LIMIT_PER_HOUR', env.DEFAULT_SEND_LIMIT_PER_HOUR, 20),
     dataDir: env.DATA_DIR || '/data',

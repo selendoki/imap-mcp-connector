@@ -4,6 +4,7 @@ import { login, type LoginDeps } from '../auth/login.js';
 import { deleteSessionsForUser } from '../auth/session.js';
 import { mcpUrl } from '../config.js';
 import { encryptSecret } from '../crypto.js';
+import { addLink, countLinks, findLink, listLinks, ownerLabel, purgeOrphanedLinked, removeLink, uniqueLabel } from '../db/links.js';
 import { listActiveGrants, revokeUserGrant } from '../db/oauth.js';
 import { deleteUser, serverSettingsOf, setPermissionLevel, updateSmtpSettings, type User } from '../db/users.js';
 import { GuardError } from '../guard.js';
@@ -57,11 +58,31 @@ function renderLogin(req: Request, res: Response, view: LoginView): void {
   });
 }
 
-function renderSettings(deps: AppDeps, req: Request, res: Response, error: string | null = null, status = 200): void {
+export const LINK_ROWS = 10;
+
+interface LinkResult {
+  email: string;
+  ok: boolean;
+  message: string;
+}
+
+function renderSettings(
+  deps: AppDeps,
+  req: Request,
+  res: Response,
+  error: string | null = null,
+  status = 200,
+  linkResults: LinkResult[] = [],
+): void {
   const user = res.locals.user as User;
   res.status(status).render('settings', {
     title: 'Settings',
     user,
+    ownerLabel: ownerLabel(user),
+    mailboxes: listLinks(deps.db, user.id),
+    maxMailboxes: deps.config.maxLinkedMailboxes,
+    linkRows: LINK_ROWS,
+    linkResults,
     csrf: csrfToken(req),
     connectorUrl: mcpUrl(deps.config).href,
     grants: listActiveGrants(deps.db, user.id, Date.now()),
@@ -137,7 +158,7 @@ export function webRouter(deps: AppDeps): Router {
     }
     const smtp = { smtpHost: b.smtp_host.trim(), smtpPort, smtpSecurity: b.smtp_security };
     try {
-      await deps.guard(user.email, { ...serverSettingsOf(user), ...smtp });
+      await deps.guard(user.email, { ...serverSettingsOf(user), ...smtp }, user.linkedOnly);
     } catch (err) {
       if (err instanceof GuardError) return renderSettings(deps, req, res, err.message, 400);
       throw err;
@@ -152,6 +173,68 @@ export function webRouter(deps: AppDeps): Router {
     res.redirect('/settings?saved=smtp');
   });
 
+  // Adds up to LINK_ROWS mailboxes at once. Each one is verified exactly like a sign-in (allowlists, discovery or a
+  // listed server, a real IMAP login) and stored as its own account with an encrypted password.
+  router.post('/settings/mailboxes', auth, verifyCsrf, async (req, res) => {
+    const owner = res.locals.user as User;
+    const b = req.body as Body;
+    const results: LinkResult[] = [];
+    for (let i = 0; i < LINK_ROWS; i++) {
+      const email = (b[`email_${i}`] ?? '').trim().toLowerCase();
+      const password = b[`password_${i}`] ?? '';
+      if (!email && !password) continue;
+      if (!email || !password) {
+        results.push({ email: email || `row ${i + 1}`, ok: false, message: 'Enter both the address and the password.' });
+        continue;
+      }
+      if (email === owner.email) {
+        results.push({ email, ok: false, message: 'This is the mailbox you are signed in with.' });
+        continue;
+      }
+      if (countLinks(deps.db, owner.id) >= deps.config.maxLinkedMailboxes) {
+        results.push({ email, ok: false, message: `At most ${deps.config.maxLinkedMailboxes} linked mailboxes.` });
+        continue;
+      }
+      // Mailboxes on the owner's own domain usually publish no discoverable settings: offer the owner's server, which
+      // login() accepts only if discovery finds nothing and the server is listed by name.
+      const sameDomain = email.slice(email.lastIndexOf('@')) === owner.email.slice(owner.email.lastIndexOf('@'));
+      const result = await login(loginDeps, {
+        email,
+        password,
+        ip: req.ip ?? 'unknown',
+        linked: true,
+        manual: sameDomain ? serverSettingsOf(owner) : undefined,
+      });
+      if (result.status !== 'ok') {
+        results.push({ email, ok: false, message: result.message });
+        continue;
+      }
+      if (result.user.id === owner.id) {
+        results.push({ email, ok: false, message: 'This is the mailbox you are signed in with.' });
+        continue;
+      }
+      const label = addLink(deps.db, owner.id, result.user.id, uniqueLabel(deps.db, owner.id, b[`label_${i}`], email, ownerLabel(owner)));
+      try {
+        await deps.pool.close(result.user.id);
+      } catch (err) {
+        log('warn', 'closing cached mail connection failed', { userId: result.user.id, error: err instanceof Error ? err.message : String(err) });
+      }
+      results.push({ email, ok: true, message: `Connected as "${label}".` });
+    }
+    if (results.length === 0) return renderSettings(deps, req, res, 'Fill in at least one mailbox.', 400);
+    renderSettings(deps, req, res, null, 200, results);
+  });
+
+  router.post('/settings/mailboxes/remove', auth, verifyCsrf, async (req, res) => {
+    const owner = res.locals.user as User;
+    const memberId = Number((req.body as Body).member_id);
+    if (Number.isInteger(memberId) && findLink(deps.db, owner.id, memberId)) {
+      removeLink(deps.db, owner.id, memberId);
+      for (const id of purgeOrphanedLinked(deps.db, [memberId])) await deps.pool.close(id);
+    }
+    res.redirect('/settings?saved=mailboxes');
+  });
+
   router.post('/settings/revoke', auth, verifyCsrf, (req, res) => {
     const grantId = (req.body as Body).grant_id;
     if (grantId) revokeUserGrant(deps.db, (res.locals.user as User).id, grantId, Date.now());
@@ -160,8 +243,10 @@ export function webRouter(deps: AppDeps): Router {
 
   router.post('/settings/delete', auth, verifyCsrf, async (req, res, next) => {
     const user = res.locals.user as User;
+    const memberIds = listLinks(deps.db, user.id).map((l) => l.user.id);
     await deps.pool.close(user.id);
     deleteUser(deps.db, user.id);
+    for (const id of purgeOrphanedLinked(deps.db, memberIds)) await deps.pool.close(id);
     deleteSessionsForUser(deps.db, user.id);
     req.session.destroy((err) => (err ? next(err) : res.redirect('/login?deleted=1')));
   });

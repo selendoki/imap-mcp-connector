@@ -17,6 +17,42 @@
   <p class="muted">You will be asked to approve access on this server.</p>
 </section>
 
+<section class="card" id="mailboxes">
+  <h2>Mailboxes</h2>
+  <p class="muted">One connection, several mailboxes. The AI sees the mailbox you signed in with and every mailbox linked below. Each password is checked with a real sign-in and stored encrypted.</p>
+  <% if (linkResults.length) { %>
+    <ul class="grants" aria-live="polite">
+      <% linkResults.forEach(function (r) { %>
+        <li><span><strong><%= r.email %></strong><br><span class="<%= r.ok ? 'ok' : 'error' %>"><%= r.ok ? '✓ ' : '✗ ' %><%= r.message %></span></span></li>
+      <% }) %>
+    </ul>
+  <% } %>
+  <ul class="grants">
+    <li><span><strong><%= ownerLabel %></strong> · <%= user.email %><br><span class="muted">Signed-in mailbox</span></span></li>
+    <% mailboxes.forEach(function (m) { %>
+      <li><span><strong><%= m.label %></strong> · <%= m.user.email %><br>
+        <% if (m.user.needsReauth) { %><span class="error">Password stopped working: add it again below.</span><% } else { %><span class="muted">Linked <%= new Date(m.createdAt).toISOString().slice(0, 10) %></span><% } %></span>
+        <form method="post" action="/settings/mailboxes/remove" onsubmit="return confirm('Remove <%= m.user.email %> from this connection?')"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="member_id" value="<%= m.user.id %>"><button class="secondary">Remove</button></form></li>
+    <% }) %>
+  </ul>
+  <% if (mailboxes.length < maxMailboxes) { %>
+  <h3>Add mailboxes</h3>
+  <p class="muted">Fill in as many rows as you need and save once. To update a password, add the mailbox again. Gmail and iCloud need an app password.</p>
+  <form method="post" action="/settings/mailboxes" autocomplete="off">
+    <input type="hidden" name="_csrf" value="<%= csrf %>">
+    <div class="links">
+      <span class="muted">Label (optional)</span><span class="muted">Address</span><span class="muted">Password or app password</span>
+      <% for (var i = 0; i < Math.min(linkRows, maxMailboxes - mailboxes.length); i++) { %>
+        <input name="label_<%= i %>" aria-label="Label <%= i + 1 %>" placeholder="e.g. sales">
+        <input name="email_<%= i %>" type="email" aria-label="Address <%= i + 1 %>" placeholder="name@example.com">
+        <input name="password_<%= i %>" type="password" aria-label="Password <%= i + 1 %>" autocomplete="new-password">
+      <% } %>
+    </div>
+    <button type="submit">Check and add mailboxes</button>
+  </form>
+  <% } %>
+</section>
+
 <section class="card">
   <h2>What can the AI do?</h2>
   <form method="post" action="/settings/permission">

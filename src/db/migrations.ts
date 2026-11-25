@@ -82,4 +82,18 @@ export const migrations: string[] = [
   ALTER TABLE users ADD COLUMN settings_source TEXT NOT NULL DEFAULT 'legacy'
     CHECK (settings_source IN ('discovered','manual','legacy'));
   `,
+  // Linked mailboxes: a signed-in account (owner) can add more mailboxes (members). Each member is a full account row
+  // with its own credentials; linked_only marks rows created through linking, which may use LINKED_* allowlists.
+  `
+  ALTER TABLE users ADD COLUMN linked_only INTEGER NOT NULL DEFAULT 0;
+  CREATE TABLE mailbox_links (
+    owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    member_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (owner_id, member_id),
+    UNIQUE (owner_id, label)
+  );
+  CREATE INDEX mailbox_links_member ON mailbox_links(member_id);
+  `,
 ];

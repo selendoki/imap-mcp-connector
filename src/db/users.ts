@@ -18,6 +18,8 @@ export interface User {
   permissionLevel: PermissionLevel;
   sendLimitPerHour: number | null;
   needsReauth: boolean;
+  /** Created by linking it to another account; may use the LINKED_* allowlists but cannot sign in on its own. */
+  linkedOnly: boolean;
   createdAt: number;
   lastLoginAt: number | null;
 }
@@ -27,6 +29,7 @@ export interface NewUser extends MailServerSettings {
   imapPasswordEnc: string;
   smtpUsername: string;
   settingsSource: Exclude<SettingsSource, 'legacy'>;
+  linkedOnly?: boolean;
 }
 
 export interface SmtpSettings {
@@ -54,6 +57,7 @@ interface UserRow {
   permission_level: PermissionLevel;
   send_limit_per_hour: number | null;
   needs_reauth: number;
+  linked_only: number;
   created_at: number;
   last_login_at: number | null;
 }
@@ -76,6 +80,7 @@ function toUser(r: UserRow): User {
     permissionLevel: r.permission_level,
     sendLimitPerHour: r.send_limit_per_hour,
     needsReauth: r.needs_reauth === 1,
+    linkedOnly: r.linked_only === 1,
     createdAt: r.created_at,
     lastLoginAt: r.last_login_at,
   };
@@ -99,9 +104,9 @@ export function createUser(db: Db, u: NewUser, now = Date.now()): User {
   const info = db
     .prepare(
       `INSERT INTO users (email, imap_host, imap_port, imap_security, imap_password_enc, settings_source,
-         smtp_host, smtp_port, smtp_security, smtp_username, auto_saves_sent, created_at, last_login_at)
+         smtp_host, smtp_port, smtp_security, smtp_username, auto_saves_sent, linked_only, created_at, last_login_at)
        VALUES (@email, @imapHost, @imapPort, @imapSecurity, @imapPasswordEnc, @settingsSource,
-         @smtpHost, @smtpPort, @smtpSecurity, @smtpUsername, @autoSavesSent, @now, @now)`,
+         @smtpHost, @smtpPort, @smtpSecurity, @smtpUsername, @autoSavesSent, @linkedOnly, @now, @now)`,
     )
     .run({
       email: normalizeEmail(u.email),
@@ -115,6 +120,7 @@ export function createUser(db: Db, u: NewUser, now = Date.now()): User {
       smtpSecurity: u.smtpSecurity,
       smtpUsername: u.smtpUsername,
       autoSavesSent: u.autoSavesSent ? 1 : 0,
+      linkedOnly: u.linkedOnly ? 1 : 0,
       now,
     });
   return findUserById(db, Number(info.lastInsertRowid))!;

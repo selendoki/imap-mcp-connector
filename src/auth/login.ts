@@ -20,7 +20,7 @@ export interface LoginDeps {
   config: Config;
   discover(email: string): Promise<MailServerSettings | null>;
   verifyImap(target: ImapTarget, password: string): Promise<VerifyResult>;
-  guard(email: string, settings: MailServerSettings): Promise<PinnedAddresses | void>;
+  guard(email: string, settings: MailServerSettings, linked?: boolean): Promise<PinnedAddresses | void>;
   now?: () => number;
 }
 
@@ -29,6 +29,11 @@ export interface LoginInput {
   password: string;
   ip: string;
   manual?: MailServerSettings;
+  /**
+   * Adding a mailbox to an already signed-in account rather than signing in. The LINKED_* allowlists apply too, and a
+   * new account created this way is marked linked-only (it can never be used to sign in on its own).
+   */
+  linked?: boolean;
 }
 
 export type LoginResult =
@@ -67,7 +72,7 @@ export async function login(deps: LoginDeps, input: LoginInput): Promise<LoginRe
     settings = serverSettingsOf(existing);
     source = existing.settingsSource;
     // Never send a password to a stored server that could have been chosen by someone else (see isTrustedServer).
-    if (!isTrustedServer(deps.config, email, existing.imapHost, source)) {
+    if (!isTrustedServer(deps.config, email, existing.imapHost, source, input.linked)) {
       if (source !== 'legacy') return { status: 'error', message: UNAPPROVED_SERVER };
       const discovered = await rateLimitedDiscover(deps, input.ip, email, now, since);
       if (!discovered.ok) return discovered.result;
@@ -86,7 +91,7 @@ export async function login(deps: LoginDeps, input: LoginInput): Promise<LoginRe
     if (discovered.settings) {
       settings = discovered.settings;
       source = 'discovered';
-    } else if (input.manual && isListedImapHost(deps.config, input.manual.imapHost)) {
+    } else if (input.manual && isListedImapHost(deps.config, input.manual.imapHost, input.linked)) {
       settings = input.manual;
       source = 'manual';
     } else if (input.manual || !deps.config.allowedImapHosts.some((h) => h !== '*')) {
@@ -98,7 +103,7 @@ export async function login(deps: LoginDeps, input: LoginInput): Promise<LoginRe
 
   let pinned: PinnedAddresses | void;
   try {
-    pinned = await deps.guard(email, settings);
+    pinned = await deps.guard(email, settings, input.linked);
   } catch (err) {
     if (err instanceof GuardError) return { status: 'error', message: err.message };
     throw err;
@@ -140,7 +145,14 @@ export async function login(deps: LoginDeps, input: LoginInput): Promise<LoginRe
   }
   const user = createUser(
     deps.db,
-    { ...settings, email, smtpUsername: email, imapPasswordEnc: passwordEnc, settingsSource: source === 'manual' ? 'manual' : 'discovered' },
+    {
+      ...settings,
+      email,
+      smtpUsername: email,
+      imapPasswordEnc: passwordEnc,
+      settingsSource: source === 'manual' ? 'manual' : 'discovered',
+      linkedOnly: Boolean(input.linked),
+    },
     now,
   );
   return { status: 'ok', user, isNew: true };

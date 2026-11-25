@@ -54,6 +54,9 @@ Lost it? Create a new one and sign in again. The stored password is replaced.
 | `SESSION_SECRET` | yes | ≥ 32 characters, signs session cookies. |
 | `ALLOWED_EMAIL_DOMAINS` | at least one of these | Comma-separated email domains allowed to sign in. |
 | `ALLOWED_IMAP_HOSTS` | at least one of these | Comma-separated IMAP hosts allowed; `*` allows any public server that auto-discovery finds. Hand-entered servers must be listed by name. |
+| `LINKED_EMAIL_DOMAINS` | no | Extra email domains that can only be **linked** to a signed-in account (see Linked mailboxes), never used to sign in. |
+| `LINKED_IMAP_HOSTS` | no | Extra IMAP hosts allowed for linked mailboxes only, e.g. `imap.gmail.com,imap.mail.me.com`. |
+| `MAX_LINKED_MAILBOXES` | no (`20`) | Linked mailboxes per account. |
 | `ALLOW_PRIVATE_HOSTS` | no (`false`) | Allow mail servers on private networks and unencrypted connections. |
 | `DEFAULT_SEND_LIMIT_PER_HOUR` | no (`20`) | Emails each user's AI may send per hour. |
 | `DATA_DIR` | no (`/data`) | Where the SQLite database lives. |
@@ -74,11 +77,22 @@ To change one user's send limit (run in the deployment directory):
 docker compose exec app node -e "const db=require('better-sqlite3')('/data/imap-connector.db'); db.prepare('UPDATE users SET send_limit_per_hour = ? WHERE email = ?').run(50, 'someone@example.com')"
 ```
 
+## Linked mailboxes
+
+One connection can cover several mailboxes. After signing in, open **Settings → Mailboxes**, fill in up to ten rows (label, address, password or app password) and save once. Every row is verified exactly like a sign-in (allowlists, discovery or a listed server, a real IMAP login) and stored as its own account with its own encrypted password; the page reports each row as connected or failed. Adding a mailbox again updates its password.
+
+- The signed-in account's permission level applies to all its mailboxes.
+- Tools take an optional `mailbox` (label or address from `list_mailboxes`); the default is the signed-in mailbox. `search_messages` also accepts `mailbox: "all"`.
+- Mail is sent from the chosen mailbox with its own SMTP login and send limit.
+- Mailboxes on the signed-in domain that publish no settings reuse the signed-in account's server, which must be listed in `ALLOWED_IMAP_HOSTS`.
+- Domains in `LINKED_EMAIL_DOMAINS` (e.g. `gmail.com`) can be linked but never used to sign in, so strangers cannot create accounts on your instance.
+- Removing a link (or deleting the account) deletes the stored credentials of mailboxes that were only ever linked.
+
 ## Tools the AI gets
 
 | Level | Tools |
 |---|---|
-| Read only | `list_folders`, `search_messages`, `get_message`, `get_thread`, `get_attachment` |
+| Read only | `list_mailboxes`, `list_folders`, `search_messages`, `get_message`, `get_thread`, `get_attachment` |
 | Read and draft | + `set_flags`, `move_messages`, `create_draft` |
 | Full access | + `send_email`, `delete_messages` (moves to Trash, never permanent) |
 

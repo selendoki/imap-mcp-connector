@@ -17,20 +17,24 @@ const defaultLookup: LookupAll = (host) => dns.lookup(host, { all: true });
 /**
  * Both allowlists must pass: a set ALLOWED_EMAIL_DOMAINS restricts who may sign in, and a set
  * ALLOWED_IMAP_HOSTS (other than "*") restricts which servers they may use. An empty list does not restrict.
+ * A linked mailbox (added by a signed-in user, never used to sign in) may also use LINKED_EMAIL_DOMAINS and
+ * LINKED_IMAP_HOSTS.
  */
-export function isAllowed(config: Config, email: string, imapHost: string): boolean {
+export function isAllowed(config: Config, email: string, imapHost: string, linked = false): boolean {
   const domain = email.slice(email.lastIndexOf('@') + 1).toLowerCase();
   const host = imapHost.toLowerCase();
   const domains = config.allowedEmailDomains;
   const hosts = config.allowedImapHosts;
-  const domainOk = domains.length === 0 || domains.includes(domain);
-  const hostOk = hosts.length === 0 || hosts.includes('*') || hosts.includes(host);
+  const domainOk = domains.length === 0 || domains.includes(domain) || (linked && config.linkedEmailDomains.includes(domain));
+  const hostOk =
+    hosts.length === 0 || hosts.includes('*') || hosts.includes(host) || (linked && config.linkedImapHosts.includes(host));
   return domainOk && hostOk;
 }
 
-/** True when ALLOWED_IMAP_HOSTS names this host; the "*" wildcard does not count. */
-export function isListedImapHost(config: Config, imapHost: string): boolean {
-  return config.allowedImapHosts.includes(imapHost.toLowerCase());
+/** True when ALLOWED_IMAP_HOSTS (or, for linked mailboxes, LINKED_IMAP_HOSTS) names this host; "*" does not count. */
+export function isListedImapHost(config: Config, imapHost: string, linked = false): boolean {
+  const host = imapHost.toLowerCase();
+  return config.allowedImapHosts.includes(host) || (linked && config.linkedImapHosts.includes(host));
 }
 
 /**
@@ -39,8 +43,8 @@ export function isListedImapHost(config: Config, imapHost: string): boolean {
  * whoever signs in first with an address decides where its real owner's password is sent. Legacy accounts (created
  * before the source was recorded) are trusted here only when they match a built-in preset or a listed server.
  */
-export function isTrustedServer(config: Config, email: string, imapHost: string, source: SettingsSource): boolean {
-  if (source === 'discovered' || isListedImapHost(config, imapHost)) return true;
+export function isTrustedServer(config: Config, email: string, imapHost: string, source: SettingsSource, linked = false): boolean {
+  if (source === 'discovered' || isListedImapHost(config, imapHost, linked)) return true;
   if (source === 'manual') return false;
   const domain = email.slice(email.lastIndexOf('@') + 1).toLowerCase();
   return Object.hasOwn(PRESETS, domain) && PRESETS[domain].imapHost === imapHost.toLowerCase();
@@ -87,8 +91,9 @@ export async function guardMailSettings(
   email: string,
   settings: MailServerSettings,
   lookup: LookupAll = defaultLookup,
+  linked = false,
 ): Promise<PinnedAddresses> {
-  if (!isAllowed(config, email, settings.imapHost)) {
+  if (!isAllowed(config, email, settings.imapHost, linked)) {
     throw new GuardError('This mail server is not allowed on this instance. Ask the administrator.');
   }
   if (config.allowPrivateHosts) return {};
@@ -102,8 +107,8 @@ export async function guardMailSettings(
 
 /** Checks a stored account before a new mail connection: its server must be trusted and pass guardMailSettings. */
 export async function guardStoredUser(config: Config, user: User, lookup: LookupAll = defaultLookup): Promise<PinnedAddresses> {
-  if (!isTrustedServer(config, user.email, user.imapHost, user.settingsSource)) {
+  if (!isTrustedServer(config, user.email, user.imapHost, user.settingsSource, user.linkedOnly)) {
     throw new GuardError("This account's mail server is not approved on this instance. Ask the user to sign in again.");
   }
-  return guardMailSettings(config, user.email, serverSettingsOf(user), lookup);
+  return guardMailSettings(config, user.email, serverSettingsOf(user), lookup, user.linkedOnly);
 }

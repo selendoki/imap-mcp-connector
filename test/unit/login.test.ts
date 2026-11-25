@@ -199,7 +199,7 @@ describe('login', () => {
     if (r.status !== 'ok') return;
     expect(d.discover).toHaveBeenCalledWith('alice@x.org');
     expect(d.verifyImap).toHaveBeenCalledWith(expect.objectContaining({ imapHost: 'imap.example.com' }), 'right');
-    expect(d.guard).toHaveBeenCalledWith('alice@x.org', discovered);
+    expect(d.guard).toHaveBeenCalledWith('alice@x.org', discovered, undefined);
     expect(r.user).toMatchObject({ imapHost: 'imap.example.com', smtpHost: 'smtp.example.com' });
   });
 
