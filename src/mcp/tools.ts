@@ -4,7 +4,7 @@ import type { ImapFlow } from 'imapflow';
 import { z } from 'zod';
 import { signInUrl, type Config } from '../config.js';
 import type { Db } from '../db/index.js';
-import { listLinks, ownerLabel } from '../db/links.js';
+import { listLinks, ownerLabel, renameLink } from '../db/links.js';
 import { findUserById, type User } from '../db/users.js';
 import type { PinnedAddresses } from '../guard.js';
 import { log } from '../log.js';
@@ -15,6 +15,7 @@ import { getAttachment } from '../mail/ops/attachment.js';
 import { listFolders, resolveFolder, resolveRole } from '../mail/ops/folders.js';
 import { getMessage } from '../mail/ops/message.js';
 import { searchMessages } from '../mail/ops/search.js';
+import { inboxStatus } from '../mail/ops/status.js';
 import { getThread } from '../mail/ops/thread.js';
 import { createDraft, sendEmail, type ComposeRequest, type OutgoingDeps } from '../mail/outgoing.js';
 import type { MailPool } from '../mail/pool.js';
@@ -190,18 +191,29 @@ export function registerTools(server: McpServer, ctx: ToolContext, level: Permis
       'list_mailboxes',
       {
         title: 'List mailboxes',
-        description: 'List the mailboxes this connection can use: the signed-in one (primary) and any linked to it. Pass a label or address as "mailbox" to other tools.',
-        inputSchema: {},
+        description: 'List the mailboxes this connection can use: the signed-in one (primary) and any linked to it. Pass a label or address as "mailbox" to other tools. With with_counts, also returns INBOX total/unread per mailbox (nothing is marked read).',
+        inputSchema: { with_counts: z.boolean().optional().describe('Also return INBOX total and unread counts per mailbox') },
         annotations: READ,
       },
-      guarded<Record<string, never>>('list_mailboxes', 'read', false, async (owner) =>
-        mailboxesOf(ctx.db, owner).map((m) => ({
-          mailbox: m.label,
-          address: m.user.email,
-          primary: m.primary,
-          needs_reauth: m.user.needsReauth,
-        })),
-      ),
+      guarded<{ with_counts?: boolean }>('list_mailboxes', 'read', false, async (owner, a) => {
+        const out = [];
+        for (const m of mailboxesOf(ctx.db, owner)) {
+          const row: Record<string, unknown> = { mailbox: m.label, address: m.user.email, primary: m.primary, needs_reauth: m.user.needsReauth };
+          if (a.with_counts) {
+            try {
+              const s = await imap(m.user, (c) => inboxStatus(c));
+              row.inbox_total = s.total;
+              row.inbox_unread = s.unread;
+            } catch (err) {
+              const mailError = toMailError(err);
+              if (!mailError) throw err;
+              row.error = `${mailError.code}: ${mailError.message}`;
+            }
+          }
+          out.push(row);
+        }
+        return out;
+      }),
     );
     server.registerTool(
       'list_folders',
@@ -256,6 +268,24 @@ export function registerTools(server: McpServer, ctx: ToolContext, level: Permis
   }
 
   if (allows(level, 'draft')) {
+    server.registerTool(
+      'rename_mailbox',
+      {
+        title: 'Rename mailbox',
+        description: 'Change the short label of a linked mailbox (letters, digits, dot, dash, underscore). The signed-in mailbox keeps its label.',
+        inputSchema: { mailbox: z.string().min(1).describe('Current label or address of a linked mailbox'), label: z.string().min(1).max(40) },
+        annotations: WRITE,
+      },
+      guarded<{ mailbox: string; label: string }>('rename_mailbox', 'draft', false, async (owner, a) => {
+        const target = pick(owner, a.mailbox);
+        if (target.id === owner.id) throw new MailError('INVALID_INPUT', 'The signed-in mailbox keeps its label; rename a linked mailbox.');
+        const r = renameLink(ctx.db, owner.id, target.id, a.label, ownerLabel(owner));
+        if (!r.ok) {
+          throw new MailError('INVALID_INPUT', r.reason === 'taken' ? `The label "${a.label}" is already used.` : 'Use letters, digits, dot, dash or underscore.');
+        }
+        return { mailbox: r.label, address: target.email };
+      }),
+    );
     server.registerTool(
       'set_flags',
       { title: 'Mark messages', description: 'Mark messages read/unread (seen) or flagged/unflagged.', inputSchema: flagsShape, annotations: WRITE },

@@ -4,11 +4,13 @@ import { login, type LoginDeps } from '../auth/login.js';
 import { deleteSessionsForUser } from '../auth/session.js';
 import { mcpUrl } from '../config.js';
 import { encryptSecret } from '../crypto.js';
-import { addLink, countLinks, findLink, listLinks, ownerLabel, purgeOrphanedLinked, removeLink, uniqueLabel } from '../db/links.js';
+import { addLink, countLinks, findLink, listLinks, ownerLabel, purgeOrphanedLinked, removeLink, renameLink, uniqueLabel } from '../db/links.js';
 import { listActiveGrants, revokeUserGrant } from '../db/oauth.js';
 import { deleteUser, serverSettingsOf, setPermissionLevel, updateSmtpSettings, type User } from '../db/users.js';
 import { GuardError } from '../guard.js';
 import { log } from '../log.js';
+import { toMailError } from '../mail/errors.js';
+import { inboxStatus } from '../mail/ops/status.js';
 import type { MailServerSettings, PermissionLevel, Security } from '../types.js';
 import { csrfToken, verifyCsrf } from './csrf.js';
 import { LEVELS } from './levels.js';
@@ -63,8 +65,13 @@ export const LINK_ROWS = 10;
 interface LinkResult {
   email: string;
   ok: boolean;
+  /** English text; the page translates it (with vars) for the configured language. */
   message: string;
+  vars?: Record<string, string | number>;
 }
+
+/** Inbox counts per account id, from "Check all mailboxes". */
+type Checks = Record<number, { total: number; unread: number } | { error: string; auth: boolean }>;
 
 function renderSettings(
   deps: AppDeps,
@@ -73,6 +80,7 @@ function renderSettings(
   error: string | null = null,
   status = 200,
   linkResults: LinkResult[] = [],
+  checks: Checks | null = null,
 ): void {
   const user = res.locals.user as User;
   res.status(status).render('settings', {
@@ -83,6 +91,7 @@ function renderSettings(
     maxMailboxes: deps.config.maxLinkedMailboxes,
     linkRows: LINK_ROWS,
     linkResults,
+    checks,
     csrf: csrfToken(req),
     connectorUrl: mcpUrl(deps.config).href,
     grants: listActiveGrants(deps.db, user.id, Date.now()),
@@ -192,7 +201,7 @@ export function webRouter(deps: AppDeps): Router {
         continue;
       }
       if (countLinks(deps.db, owner.id) >= deps.config.maxLinkedMailboxes) {
-        results.push({ email, ok: false, message: `At most ${deps.config.maxLinkedMailboxes} linked mailboxes.` });
+        results.push({ email, ok: false, message: 'At most {max} linked mailboxes.', vars: { max: deps.config.maxLinkedMailboxes } });
         continue;
       }
       // Mailboxes on the owner's own domain usually publish no discoverable settings: offer the owner's server, which
@@ -219,10 +228,61 @@ export function webRouter(deps: AppDeps): Router {
       } catch (err) {
         log('warn', 'closing cached mail connection failed', { userId: result.user.id, error: err instanceof Error ? err.message : String(err) });
       }
-      results.push({ email, ok: true, message: `Connected as "${label}".` });
+      results.push({ email, ok: true, message: 'Connected as "{label}".', vars: { label } });
     }
     if (results.length === 0) return renderSettings(deps, req, res, 'Fill in at least one mailbox.', 400);
     renderSettings(deps, req, res, null, 200, results);
+  });
+
+  router.post('/settings/mailboxes/rename', auth, verifyCsrf, (req, res) => {
+    const owner = res.locals.user as User;
+    const b = req.body as Body;
+    const memberId = Number(b.member_id);
+    const link = Number.isInteger(memberId) ? findLink(deps.db, owner.id, memberId) : undefined;
+    if (!link) return res.redirect('/settings#mailboxes');
+    const r = renameLink(deps.db, owner.id, memberId, b.label ?? '', ownerLabel(owner));
+    const result: LinkResult = r.ok
+      ? { email: link.user.email, ok: true, message: 'Renamed to "{label}".', vars: { label: r.label } }
+      : { email: link.user.email, ok: false, message: r.reason === 'taken' ? 'This label is already used.' : 'Use letters, digits, dot, dash or underscore.' };
+    renderSettings(deps, req, res, null, r.ok ? 200 : 400, [result]);
+  });
+
+  // Replaces a linked mailbox's stored password after checking it with a real sign-in to its stored server.
+  router.post('/settings/mailboxes/password', auth, verifyCsrf, async (req, res) => {
+    const owner = res.locals.user as User;
+    const b = req.body as Body;
+    const memberId = Number(b.member_id);
+    const link = Number.isInteger(memberId) ? findLink(deps.db, owner.id, memberId) : undefined;
+    if (!link) return res.redirect('/settings#mailboxes');
+    const email = link.user.email;
+    if (!b.password) return renderSettings(deps, req, res, null, 400, [{ email, ok: false, message: 'Enter the new password.' }]);
+    const result = await login(loginDeps, { email, password: b.password, ip: req.ip ?? 'unknown', linked: true });
+    if (result.status !== 'ok') return renderSettings(deps, req, res, null, 400, [{ email, ok: false, message: result.message }]);
+    await deps.pool.close(link.user.id).catch(() => undefined);
+    renderSettings(deps, req, res, null, 200, [{ email, ok: true, message: 'Password updated.' }]);
+  });
+
+  // Signs in to every mailbox and reports INBOX counts; STATUS does not select the folder, so nothing is marked read.
+  router.post('/settings/mailboxes/check', auth, verifyCsrf, async (req, res) => {
+    const owner = res.locals.user as User;
+    const checks: Checks = {};
+    for (const user of [owner, ...listLinks(deps.db, owner.id).map((l) => l.user)]) {
+      try {
+        checks[user.id] = await deps.pool.withImap(user, (c) => inboxStatus(c));
+      } catch (err) {
+        const mailError = toMailError(err);
+        const auth = mailError?.code === 'AUTH_FAILED';
+        checks[user.id] = {
+          auth,
+          error: auth
+            ? 'The password no longer works: set a new one in the ⋯ menu.'
+            : mailError?.code === 'UPSTREAM_UNAVAILABLE'
+              ? 'The mail server did not respond. Try again shortly.'
+              : (mailError?.message ?? 'Unexpected error.'),
+        };
+      }
+    }
+    renderSettings(deps, req, res, null, 200, [], checks);
   });
 
   router.post('/settings/mailboxes/remove', auth, verifyCsrf, async (req, res) => {

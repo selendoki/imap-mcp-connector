@@ -1,88 +1,147 @@
 <%- include('partials/head', { title }) %>
 <header>
-  <h1>Settings</h1>
-  <form method="post" action="/logout"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="secondary">Sign out</button></form>
+  <h1><%= t('Settings') %></h1>
+  <form method="post" action="/logout"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="secondary"><%= t('Sign out') %></button></form>
 </header>
-<p class="muted">Signed in as <strong><%= user.email %></strong></p>
-<% if (user.needsReauth) { %><p class="banner" role="alert">Your mail password stopped working. <a href="/login">Sign in again</a> with your current password or app password.</p><% } %>
-<% if (welcome) { %><p class="ok">Your account is ready. Connect it to Claude or ChatGPT below.</p><% } %>
-<% if (saved) { %><p class="ok">Saved.</p><% } %>
-<% if (error) { %><p class="error" role="alert"><%= error %></p><% } %>
-
-<section class="card">
-  <h2>Connect an AI</h2>
-  <p>Connector URL: <code><%= connectorUrl %></code></p>
-  <p><strong>Claude:</strong> Settings → Connectors → Add custom connector → paste the URL → Connect.</p>
-  <p><strong>ChatGPT:</strong> Settings → Connectors (enable developer mode if needed) → Create → paste the URL → choose OAuth.</p>
-  <p class="muted">You will be asked to approve access on this server.</p>
-</section>
+<p class="muted"><%= t('Signed in as') %> <strong><%= user.email %></strong></p>
+<% if (user.needsReauth) { %><p class="banner" role="alert"><%= t('Your mail password stopped working.') %> <a href="/login"><%= t('Sign in again') %></a> <%= t('with your current password or app password.') %></p><% } %>
+<% if (welcome) { %><p class="ok"><%= t('Your account is ready. Connect it to Claude or ChatGPT below.') %></p><% } %>
+<% if (saved) { %><p class="ok"><%= t('Saved.') %></p><% } %>
+<% if (error) { %><p class="error" role="alert"><%= t(error) %></p><% } %>
 
 <section class="card" id="mailboxes">
-  <h2>Mailboxes</h2>
-  <p class="muted">One connection, several mailboxes. The AI sees the mailbox you signed in with and every mailbox linked below. Each password is checked with a real sign-in and stored encrypted.</p>
+  <div class="card-head">
+    <h2><%= t('Mailboxes') %> <span class="count"><%= mailboxes.length + 1 %></span></h2>
+    <form method="post" action="/settings/mailboxes/check"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="secondary" title="<%= t('Checks each mailbox and counts messages in Inbox. Nothing is marked as read.') %>"><%= t('Check all mailboxes') %></button></form>
+  </div>
+  <p class="muted"><%= t('One connection, several mailboxes. The AI sees the mailbox you signed in with and every mailbox listed here.') %></p>
+
   <% if (linkResults.length) { %>
-    <ul class="grants" aria-live="polite">
+    <ul class="results" aria-live="polite">
       <% linkResults.forEach(function (r) { %>
-        <li><span><strong><%= r.email %></strong><br><span class="<%= r.ok ? 'ok' : 'error' %>"><%= r.ok ? '✓ ' : '✗ ' %><%= r.message %></span></span></li>
+        <li class="<%= r.ok ? 'ok' : 'error' %>"><strong><%= r.email %></strong> — <%= r.ok ? '✓' : '✗' %> <%= t(r.message, r.vars) %></li>
       <% }) %>
     </ul>
   <% } %>
-  <ul class="grants">
-    <li><span><strong><%= ownerLabel %></strong> · <%= user.email %><br><span class="muted">Signed-in mailbox</span></span></li>
-    <% mailboxes.forEach(function (m) { %>
-      <li><span><strong><%= m.label %></strong> · <%= m.user.email %><br>
-        <% if (m.user.needsReauth) { %><span class="error">Password stopped working: add it again below.</span><% } else { %><span class="muted">Linked <%= new Date(m.createdAt).toISOString().slice(0, 10) %></span><% } %></span>
-        <form method="post" action="/settings/mailboxes/remove" onsubmit="return confirm('Remove <%= m.user.email %> from this connection?')"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="member_id" value="<%= m.user.id %>"><button class="secondary">Remove</button></form></li>
-    <% }) %>
-  </ul>
+
+  <% function esc(v) { return String(v).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+     function statusCell(u) {
+       var c = checks && checks[u.id];
+       if (c && c.error) return '<span class="pill bad">✗ ' + esc(t(c.auth ? 'Needs a new password' : 'Not responding')) + '</span>';
+       if (u.needsReauth) return '<span class="pill bad">✗ ' + esc(t('Needs a new password')) + '</span>';
+       if (c) return '<span class="pill good">✓ ' + esc(t('OK')) + '</span>';
+       return '<span class="pill">' + esc(t('not checked')) + '</span>';
+     }
+     function inboxCell(u) {
+       var c = checks && checks[u.id];
+       if (!c) return '<span class="muted">—</span>';
+       if (c.error) return '<span class="error small">' + esc(t(c.error)) + '</span>';
+       return esc(t('{unread} unread of {total}', { unread: c.unread, total: c.total }));
+     } %>
+
+  <div class="table-wrap">
+  <table class="boxes">
+    <thead><tr><th><%= t('Label') %></th><th><%= t('Address') %></th><th><%= t('Status') %></th><th><%= t('Inbox') %></th><th></th></tr></thead>
+    <tbody>
+      <tr>
+        <td><strong><%= ownerLabel %></strong> <span class="pill"><%= t('signed in') %></span></td>
+        <td><%= user.email %></td>
+        <td><%- statusCell(user) %></td>
+        <td><%- inboxCell(user) %></td>
+        <td></td>
+      </tr>
+      <% mailboxes.forEach(function (m) { %>
+      <tr>
+        <td><strong><%= m.label %></strong></td>
+        <td><%= m.user.email %></td>
+        <td><%- statusCell(m.user) %></td>
+        <td><%- inboxCell(m.user) %></td>
+        <td>
+          <details class="actions">
+            <summary aria-label="<%= m.user.email %>">⋯</summary>
+            <div class="menu">
+              <form method="post" action="/settings/mailboxes/rename" class="inline">
+                <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="member_id" value="<%= m.user.id %>">
+                <label><%= t('Rename') %><input name="label" value="<%= m.label %>" maxlength="40" required></label>
+                <button><%= t('Save') %></button>
+              </form>
+              <form method="post" action="/settings/mailboxes/password" class="inline">
+                <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="member_id" value="<%= m.user.id %>">
+                <label><%= t('New password') %><input name="password" type="password" autocomplete="new-password" required></label>
+                <button><%= t('Update password') %></button>
+              </form>
+              <form method="post" action="/settings/mailboxes/remove" onsubmit="return confirm(<%= JSON.stringify(t('Remove {email} from this connection? Its stored password is deleted; the mailbox itself is not touched.', { email: m.user.email })) %>)">
+                <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="member_id" value="<%= m.user.id %>">
+                <button class="danger-link"><%= t('Remove') %></button>
+              </form>
+            </div>
+          </details>
+        </td>
+      </tr>
+      <% }) %>
+    </tbody>
+  </table>
+  </div>
+
   <% if (mailboxes.length < maxMailboxes) { %>
-  <h3>Add mailboxes</h3>
-  <p class="muted">Fill in as many rows as you need and save once. To update a password, add the mailbox again. Gmail and iCloud need an app password.</p>
-  <form method="post" action="/settings/mailboxes" autocomplete="off">
-    <input type="hidden" name="_csrf" value="<%= csrf %>">
-    <div class="links">
-      <span class="muted">Label (optional)</span><span class="muted">Address</span><span class="muted">Password or app password</span>
-      <% for (var i = 0; i < Math.min(linkRows, maxMailboxes - mailboxes.length); i++) { %>
-        <input name="label_<%= i %>" aria-label="Label <%= i + 1 %>" placeholder="e.g. sales">
-        <input name="email_<%= i %>" type="email" aria-label="Address <%= i + 1 %>" placeholder="name@example.com">
-        <input name="password_<%= i %>" type="password" aria-label="Password <%= i + 1 %>" autocomplete="new-password">
-      <% } %>
-    </div>
-    <button type="submit">Check and add mailboxes</button>
-  </form>
+  <details class="add" <%= mailboxes.length === 0 ? 'open' : '' %>>
+    <summary><%= t('Add mailboxes') %></summary>
+    <p class="muted"><%= t('Fill in as many rows as you need and save once. Each password is checked with a real sign-in and stored encrypted. Gmail and iCloud need an app password.') %></p>
+    <form method="post" action="/settings/mailboxes" autocomplete="off">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="links">
+        <span class="muted"><%= t('Label (optional)') %></span><span class="muted"><%= t('Address') %></span><span class="muted"><%= t('Password or app password') %></span>
+        <% for (var i = 0; i < Math.min(linkRows, maxMailboxes - mailboxes.length); i++) { %>
+          <input name="label_<%= i %>" aria-label="<%= t('Label') %> <%= i + 1 %>" placeholder="<%= t('e.g. sales') %>">
+          <input name="email_<%= i %>" type="email" aria-label="<%= t('Address') %> <%= i + 1 %>" placeholder="name@example.com">
+          <input name="password_<%= i %>" type="password" aria-label="<%= t('Password or app password') %> <%= i + 1 %>" autocomplete="new-password">
+        <% } %>
+      </div>
+      <button type="submit"><%= t('Check and add mailboxes') %></button>
+    </form>
+  </details>
   <% } %>
 </section>
 
 <section class="card">
-  <h2>What can the AI do?</h2>
+  <h2><%= t('What can the AI do?') %></h2>
+  <p class="muted"><%= t('Applies to every mailbox of this connection.') %></p>
   <form method="post" action="/settings/permission">
     <input type="hidden" name="_csrf" value="<%= csrf %>">
     <% levels.forEach(function (l) { %>
       <label class="option"><input type="radio" name="level" value="<%= l.value %>" <%= user.permissionLevel === l.value ? 'checked' : '' %>>
-        <span><strong><%= l.label %></strong><br><span class="muted"><%= l.description %></span></span></label>
+        <span><strong><%= t(l.label) %></strong><br><span class="muted"><%= t(l.description) %></span></span></label>
     <% }) %>
-    <button type="submit">Save</button>
+    <button type="submit"><%= t('Save') %></button>
   </form>
 </section>
 
 <section class="card">
-  <h2>Connected apps</h2>
-  <% if (grants.length === 0) { %><p class="muted">No AI apps connected yet.</p><% } else { %>
+  <h2><%= t('Connect an AI') %></h2>
+  <p><%= t('Connector URL:') %> <code><%= connectorUrl %></code></p>
+  <p><strong>Claude:</strong> <%= t('Settings → Connectors → Add custom connector → paste the URL → Connect.') %></p>
+  <p><strong>ChatGPT:</strong> <%= t('Settings → Connectors (enable developer mode if needed) → Create → paste the URL → choose OAuth.') %></p>
+  <p class="muted"><%= t('You will be asked to approve access on this server.') %></p>
+</section>
+
+<section class="card">
+  <h2><%= t('Connected apps') %></h2>
+  <% if (grants.length === 0) { %><p class="muted"><%= t('No AI apps connected yet.') %></p><% } else { %>
     <ul class="grants">
       <% grants.forEach(function (g) { %>
-        <li><span><strong><%= g.clientName || 'Unnamed app' %></strong><br><span class="muted">Connected <%= new Date(g.connectedAt).toISOString().slice(0, 10) %><%= g.lastUsedAt ? ' · last used ' + new Date(g.lastUsedAt).toISOString().slice(0, 10) : '' %></span></span>
-          <form method="post" action="/settings/revoke"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="grant_id" value="<%= g.grantId %>"><button class="secondary">Revoke</button></form></li>
+        <li><span><strong><%= g.clientName || t('Unnamed app') %></strong><br><span class="muted"><%= t('Connected') %> <%= new Date(g.connectedAt).toISOString().slice(0, 10) %><%= g.lastUsedAt ? ' · ' + t('last used') + ' ' + new Date(g.lastUsedAt).toISOString().slice(0, 10) : '' %></span></span>
+          <form method="post" action="/settings/revoke"><input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="grant_id" value="<%= g.grantId %>"><button class="secondary"><%= t('Revoke') %></button></form></li>
       <% }) %>
     </ul>
   <% } %>
 </section>
 
-<section class="card">
-  <h2>Sending (SMTP)</h2>
+<details class="card">
+  <summary><h2 class="inline-h"><%= t('Sending (SMTP)') %></h2></summary>
   <p class="muted">IMAP: <%= user.imapHost %>:<%= user.imapPort %> (<%= user.imapSecurity %>)</p>
   <form method="post" action="/settings/smtp">
     <input type="hidden" name="_csrf" value="<%= csrf %>">
-    <label for="smtp_host">SMTP server</label>
+    <label for="smtp_host"><%= t('SMTP server') %></label>
     <div class="row">
       <input id="smtp_host" name="smtp_host" required value="<%= user.smtpHost %>">
       <input name="smtp_port" type="number" aria-label="SMTP port" required value="<%= user.smtpPort %>">
@@ -90,21 +149,21 @@
         <% ['tls', 'starttls', 'none'].forEach(function (s) { %><option value="<%= s %>" <%= user.smtpSecurity === s ? 'selected' : '' %>><%= s.toUpperCase() %></option><% }) %>
       </select>
     </div>
-    <label for="smtp_username">SMTP username</label>
+    <label for="smtp_username"><%= t('SMTP username') %></label>
     <input id="smtp_username" name="smtp_username" required value="<%= user.smtpUsername %>">
-    <label for="smtp_password">SMTP password (leave empty to keep the current one)</label>
+    <label for="smtp_password"><%= t('SMTP password (leave empty to keep the current one)') %></label>
     <input id="smtp_password" name="smtp_password" type="password" autocomplete="new-password">
-    <label class="option"><input type="checkbox" name="use_imap_password" <%= user.smtpPasswordEnc ? '' : 'checked' %>> Use my mail (IMAP) password for SMTP</label>
-    <button type="submit">Save SMTP settings</button>
+    <label class="option"><input type="checkbox" name="use_imap_password" <%= user.smtpPasswordEnc ? '' : 'checked' %>> <%= t('Use my mail (IMAP) password for SMTP') %></label>
+    <button type="submit"><%= t('Save SMTP settings') %></button>
   </form>
-</section>
+</details>
 
-<section class="card">
-  <h2>Delete account</h2>
-  <p class="muted">Removes your stored credentials and disconnects every AI app. Your mailbox is not touched.</p>
-  <form method="post" action="/settings/delete" onsubmit="return confirm('Delete your account and stored credentials?')">
+<details class="card">
+  <summary><h2 class="inline-h"><%= t('Delete account') %></h2></summary>
+  <p class="muted"><%= t('Removes your stored credentials and disconnects every AI app. Your mailbox is not touched.') %></p>
+  <form method="post" action="/settings/delete" onsubmit="return confirm(<%= JSON.stringify(t('Delete your account and stored credentials?')) %>)">
     <input type="hidden" name="_csrf" value="<%= csrf %>">
-    <button class="danger">Delete my account</button>
+    <button class="danger"><%= t('Delete my account') %></button>
   </form>
-</section>
+</details>
 <%- include('partials/foot') %>

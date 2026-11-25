@@ -37,20 +37,46 @@ export function findLink(db: Db, ownerId: number, memberId: number): LinkedMailb
   return listLinks(db, ownerId).find((l) => l.user.id === memberId);
 }
 
+/** Turns user input into a label: lower case, letters/digits/._-; an address becomes its local part. */
+export function cleanLabel(raw: string | undefined): string {
+  let v = (raw ?? '').trim().toLowerCase();
+  if (v.includes('@')) v = v.slice(0, v.indexOf('@'));
+  return v
+    .replace(/[^\p{L}\p{N}._-]+/gu, '-')
+    .replace(/^[-.]+|[-.]+$/g, '')
+    .slice(0, 40);
+}
+
+function takenLabels(db: Db, ownerId: number, ownerLbl: string, exceptMemberId?: number): Set<string> {
+  return new Set([
+    ownerLbl,
+    'all',
+    ...listLinks(db, ownerId)
+      .filter((l) => l.user.id !== exceptMemberId)
+      .map((l) => l.label),
+  ]);
+}
+
 /** A short, unique (per owner) label for a new link: the requested one, or the address' local part, plus -2, -3... */
-export function uniqueLabel(db: Db, ownerId: number, requested: string | undefined, email: string, ownerLabel: string): string {
-  const base =
-    (requested ?? '')
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9._-]+/g, '-')
-      .replace(/^-+|-+$/g, '')
-      .slice(0, 40) || email.slice(0, email.indexOf('@')).toLowerCase().replace(/[^a-z0-9._-]+/g, '-').slice(0, 40) || 'mailbox';
-  const taken = new Set([ownerLabel, 'all', ...listLinks(db, ownerId).map((l) => l.label)]);
+export function uniqueLabel(db: Db, ownerId: number, requested: string | undefined, email: string, ownerLbl: string): string {
+  const base = cleanLabel(requested) || cleanLabel(email) || 'mailbox';
+  const taken = takenLabels(db, ownerId, ownerLbl);
   if (!taken.has(base)) return base;
   for (let i = 2; ; i++) {
     if (!taken.has(`${base}-${i}`)) return `${base}-${i}`;
   }
+}
+
+export type RenameResult = { ok: true; label: string } | { ok: false; reason: 'empty' | 'taken' | 'not_found' };
+
+/** Renames one of the owner's links. Labels stay unique per owner and can't shadow the owner's own label or "all". */
+export function renameLink(db: Db, ownerId: number, memberId: number, requested: string, ownerLbl: string): RenameResult {
+  if (!findLink(db, ownerId, memberId)) return { ok: false, reason: 'not_found' };
+  const label = cleanLabel(requested);
+  if (!label) return { ok: false, reason: 'empty' };
+  if (takenLabels(db, ownerId, ownerLbl, memberId).has(label)) return { ok: false, reason: 'taken' };
+  db.prepare('UPDATE mailbox_links SET label = ? WHERE owner_id = ? AND member_id = ?').run(label, ownerId, memberId);
+  return { ok: true, label };
 }
 
 /** Links a member to an owner, keeping the existing label when the link already exists. Returns the label in use. */

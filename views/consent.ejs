@@ -1,14 +1,14 @@
 <%- include('partials/head', { title }) %>
-<h1>Allow <%= clientName %> to use your mailbox?</h1>
+<h1><%= t('Allow {app} to use your mailbox?', { app: clientName }) %></h1>
 <div class="card">
-  <p><strong><%= clientName %></strong> wants to access <strong><%= user.email %></strong>.</p>
-  <p>After approval you'll be sent to <strong><%= redirectHost %></strong>.</p>
-  <p>Current permission level: <strong><%= level %></strong>. You can change it any time in <a href="/settings">settings</a>, and revoke this app there too.</p>
+  <p><%= t('{app} wants to access {email} and its linked mailboxes.', { app: clientName, email: user.email }) %></p>
+  <p><%= t("After approval you'll be sent to {host}.", { host: redirectHost }) %></p>
+  <p><%= t('Current permission level: {level}. You can change it any time in settings, and revoke this app there too.', { level: t(level) }) %> <a href="/settings"><%= t('Settings') %></a></p>
   <form method="post" action="/consent">
     <input type="hidden" name="_csrf" value="<%= csrf %>">
     <input type="hidden" name="req" value="<%= reqId %>">
-    <button type="submit" name="decision" value="approve">Approve</button>
-    <button type="submit" name="decision" value="deny" class="secondary">Deny</button>
+    <button type="submit" name="decision" value="approve"><%= t('Approve') %></button>
+    <button type="submit" name="decision" value="deny" class="secondary"><%= t('Deny') %></button>
   </form>
 </div>
 <%- include('partials/foot') %>

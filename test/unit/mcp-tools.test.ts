@@ -30,7 +30,7 @@ describe('registerTools', () => {
     const pool = new MailPool({ db, key: TEST_KEY, signInUrl: 'http://localhost:3000/login' });
     registerTools(fake, { db, config: testConfig(), pool, smtpFactory: defaultSmtpFactory, userId: user.id }, 'draft');
     expect([...handlers.keys()].sort()).toEqual(
-      ['create_draft', 'get_attachment', 'get_message', 'get_thread', 'list_folders', 'list_mailboxes', 'move_messages', 'search_messages', 'set_flags'],
+      ['create_draft', 'get_attachment', 'get_message', 'get_thread', 'list_folders', 'list_mailboxes', 'move_messages', 'rename_mailbox', 'search_messages', 'set_flags'],
     );
 
     setPermissionLevel(db, user.id, 'read');

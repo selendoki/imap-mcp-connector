@@ -15,6 +15,7 @@ import type { MailPool } from './mail/pool.js';
 import type { SmtpFactory } from './mail/smtp.js';
 import { mcpRouter } from './mcp/http.js';
 import { consentRouter } from './web/consent.js';
+import { translator } from './web/i18n.js';
 import { webRouter } from './web/routes.js';
 
 export interface AppDeps {
@@ -76,8 +77,14 @@ export function createApp(deps: AppDeps): express.Express {
   app.set('view engine', 'ejs');
   app.set('views', VIEWS_DIR);
 
+  const t = translator(deps.config.uiLang);
   app.use(requestId);
   app.use(noFraming);
+  app.use((_req, res, next) => {
+    res.locals.t = t;
+    res.locals.lang = deps.config.uiLang;
+    next();
+  });
   app.get('/healthz', (_req, res) => {
     res.json({ ok: true });
   });

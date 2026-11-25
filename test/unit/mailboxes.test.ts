@@ -232,3 +232,121 @@ describe('mailbox selection in tools', () => {
     expect(res.content[0].text).toMatch(/^INVALID_INPUT/);
   });
 });
+
+describe('managing linked mailboxes', () => {
+  it('cleans labels: an address becomes its local part, Cyrillic is kept', async () => {
+    const { cleanLabel } = await import('../../src/db/links.js');
+    expect(cleanLabel('commercial@nexus.example')).toBe('commercial');
+    expect(cleanLabel('Gennady S.')).toBe('gennady-s');
+    expect(cleanLabel('  Коммерция ')).toBe('коммерция');
+    expect(cleanLabel('!!!')).toBe('');
+  });
+
+  it('renames a link, refusing duplicates and the owner label', async () => {
+    const { app, deps } = linkedApp();
+    const agent = request.agent(app);
+    await signIn(agent, 'alice@x.org');
+    await addMailboxes(agent, [
+      { label: 'b', email: 'bob@x.org', password: 'right' },
+      { label: 'c', email: 'carol@gmail.com', password: 'right' },
+    ]);
+    const bob = findUserByEmail(deps.db, 'bob@x.org')!;
+    const rename = async (label: string) => {
+      const page = await agent.get('/settings');
+      return agent.post('/settings/mailboxes/rename').type('form').send({ _csrf: csrfFrom(page.text), member_id: String(bob.id), label });
+    };
+    expect((await rename('Sales Team')).text).toContain('Renamed to &#34;sales-team&#34;');
+    expect((await rename('c')).status).toBe(400);
+    expect((await rename('alice')).status).toBe(400);
+    const owner = findUserByEmail(deps.db, 'alice@x.org')!;
+    expect(listLinks(deps.db, owner.id).map((l) => l.label)).toEqual(['sales-team', 'c']);
+  });
+
+  it('updates a linked mailbox password after a real sign-in check', async () => {
+    const { app, deps } = linkedApp();
+    const agent = request.agent(app);
+    await signIn(agent, 'alice@x.org');
+    await addMailboxes(agent, [{ email: 'carol@gmail.com', password: 'right' }]);
+    const carol = findUserByEmail(deps.db, 'carol@gmail.com')!;
+    const send = async (password: string) => {
+      const page = await agent.get('/settings');
+      return agent.post('/settings/mailboxes/password').type('form').send({ _csrf: csrfFrom(page.text), member_id: String(carol.id), password });
+    };
+    expect((await send('wrong')).text).toContain('Email or password incorrect');
+    const ok = await send('right');
+    expect(ok.status).toBe(200);
+    expect(ok.text).toContain('Password updated.');
+  });
+
+  it('"Check all mailboxes" reports inbox counts per mailbox and errors without failing the page', async () => {
+    const pool = {
+      withImap: async (user: { email: string }) => {
+        if (user.email === 'carol@gmail.com') {
+          const { MailError } = await import('../../src/mail/errors.js');
+          throw new MailError('AUTH_FAILED', 'The mailbox password no longer works.');
+        }
+        return { total: 12, unread: 3 };
+      },
+      close: async () => undefined,
+    } as unknown as MailPool;
+    const config = testConfig(LINKED_ENV);
+    const { app } = testApp(
+      {
+        pool,
+        discover: async (email) => (email.endsWith('@gmail.com') ? gmail : xorg),
+        guard: (email, settings, linked) => guardMailSettings(config, email, settings, publicLookup, linked),
+      },
+      LINKED_ENV,
+    );
+    const agent = request.agent(app);
+    await signIn(agent, 'alice@x.org');
+    await addMailboxes(agent, [{ email: 'carol@gmail.com', password: 'right' }]);
+    const page = await agent.get('/settings');
+    const res = await agent.post('/settings/mailboxes/check').type('form').send({ _csrf: csrfFrom(page.text) });
+    expect(res.status).toBe(200);
+    expect(res.text).toContain('3 unread of 12');
+    expect(res.text).toContain('The password no longer works: set a new one in the ⋯ menu.');
+  });
+
+  it('rename_mailbox tool renames linked mailboxes but not the signed-in one', async () => {
+    const db = testDb();
+    const owner = createTestUser(db, { email: 'gs@x.org', permissionLevel: 'draft' });
+    const sales = createTestUser(db, { email: 'sales@x.org', linkedOnly: true });
+    addLink(db, owner.id, sales.id, 'sales-x.org');
+    type Handler = (args: unknown) => Promise<{ isError?: boolean; content: { text: string }[] }>;
+    const handlers = new Map<string, Handler>();
+    const fake = { registerTool: (name: string, _c: unknown, cb: Handler) => handlers.set(name, cb) } as unknown as McpServer;
+    registerTools(fake, { db, config: testConfig(), pool: {} as MailPool, smtpFactory: defaultSmtpFactory, userId: owner.id }, 'draft');
+    const ok = await handlers.get('rename_mailbox')!({ mailbox: 'sales@x.org', label: 'sales' });
+    expect(JSON.parse(ok.content[0].text)).toEqual({ mailbox: 'sales', address: 'sales@x.org' });
+    const self = await handlers.get('rename_mailbox')!({ mailbox: 'gs', label: 'boss' });
+    expect(self.isError).toBe(true);
+  });
+});
+
+describe('Russian interface', () => {
+  it('renders pages and messages in Russian with UI_LANG=ru', async () => {
+    const env = { ...LINKED_ENV, UI_LANG: 'ru' };
+    const config = testConfig(env);
+    const { app } = testApp(
+      {
+        discover: async (email) => (email.endsWith('@gmail.com') ? gmail : xorg),
+        guard: (email, settings, linked) => guardMailSettings(config, email, settings, publicLookup, linked),
+      },
+      env,
+    );
+    const agent = request.agent(app);
+    const login = await agent.get('/login');
+    expect(login.text).toContain('<html lang="ru">');
+    expect(login.text).toContain('Подключите почту к ИИ');
+    await signIn(agent, 'alice@x.org');
+    const res = await addMailboxes(agent, [
+      { email: 'carol@gmail.com', password: 'right' },
+      { email: 'erin@x.org', password: 'wrong' },
+    ]);
+    expect(res.text).toContain('Ящики');
+    expect(res.text).toContain('Подключён как «carol»');
+    expect(res.text).toContain('Неверный адрес или пароль');
+    expect((await agent.get('/nope')).text).toContain('Такой страницы нет.');
+  });
+});
