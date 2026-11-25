@@ -103,6 +103,82 @@
   <% } %>
 </section>
 
+<% if (telegramEnabled) { %>
+<section class="card" id="telegram">
+  <div class="card-head"><h2>Telegram <span class="count"><%= telegramAccounts.length %></span></h2></div>
+  <p class="muted"><%= t('Your own Telegram accounts. The AI reads chats without marking them as read; it can send only where you allow it below and only with full access.') %></p>
+  <% if (telegramError) { %><p class="error" role="alert">✗ <%= t(telegramError) %></p><% } %>
+
+  <% if (telegramAccounts.length) { %>
+  <div class="table-wrap"><table class="boxes">
+    <thead><tr><th><%= t('Label') %></th><th><%= t('Account') %></th><th><%= t('Status') %></th><th><%= t('Sending') %></th><th></th></tr></thead>
+    <tbody>
+    <% telegramAccounts.forEach(function (a) { %>
+      <tr>
+        <td><strong><%= a.label %></strong></td>
+        <td><%= a.displayName || '' %><br><span class="muted"><%= a.phoneMasked %></span></td>
+        <td><% if (a.needsReauth) { %><span class="pill bad">✗ <%= t('Sign in again') %></span><% } else { %><span class="pill good">✓ <%= t('OK') %></span><% } %></td>
+        <td>
+          <form method="post" action="/settings/telegram/allow-send" class="inline-toggle">
+            <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="account_id" value="<%= a.id %>"><input type="hidden" name="allow" value="<%= a.allowSend ? '0' : '1' %>">
+            <span class="pill <%= a.allowSend ? 'good' : '' %>"><%= a.allowSend ? t('allowed') : t('off') %></span>
+            <button class="secondary small-btn"><%= a.allowSend ? t('Turn off') : t('Allow') %></button>
+          </form>
+        </td>
+        <td>
+          <form method="post" action="/settings/telegram/remove" onsubmit="return confirm(<%= JSON.stringify(t('Disconnect Telegram account {label}? The stored session is deleted; your Telegram account is not touched.', { label: a.label })) %>)">
+            <input type="hidden" name="_csrf" value="<%= csrf %>"><input type="hidden" name="account_id" value="<%= a.id %>">
+            <button class="danger-link"><%= t('Remove') %></button>
+          </form>
+        </td>
+      </tr>
+    <% }) %>
+    </tbody>
+  </table></div>
+  <% } %>
+
+  <% if (telegram && telegram.step === 'code') { %>
+    <form method="post" action="/settings/telegram/code" class="tg-step">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <p><%= t('Telegram sent a code to your Telegram app for {phone}. Enter it here.', { phone: telegram.phone }) %></p>
+      <label for="tg_code"><%= t('Code') %></label>
+      <input id="tg_code" name="code" inputmode="numeric" autocomplete="one-time-code" required autofocus>
+      <button><%= t('Sign in') %></button>
+    </form>
+    <form method="post" action="/settings/telegram/cancel"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="secondary"><%= t('Cancel') %></button></form>
+  <% } else if (telegram && telegram.step === 'password') { %>
+    <form method="post" action="/settings/telegram/password" class="tg-step">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <p><%= t('This account has two-step verification. Enter your Telegram cloud password.') %><% if (telegram.hint) { %> <span class="muted">(<%= t('hint') %>: <%= telegram.hint %>)</span><% } %></p>
+      <label for="tg_pw"><%= t('Cloud password') %></label>
+      <input id="tg_pw" name="password" type="password" autocomplete="current-password" required autofocus>
+      <button><%= t('Sign in') %></button>
+    </form>
+    <form method="post" action="/settings/telegram/cancel"><input type="hidden" name="_csrf" value="<%= csrf %>"><button class="secondary"><%= t('Cancel') %></button></form>
+  <% } else { %>
+  <details class="add" <%= telegramAccounts.length === 0 ? 'open' : '' %>>
+    <summary><%= t('Connect a Telegram account') %></summary>
+    <ol class="muted steps">
+      <li><%= t('Open my.telegram.org, sign in with the phone number of the account, choose "API development tools" and create an app (any name).') %></li>
+      <li><%= t('Copy api_id and api_hash into the form below and press "Get code".') %></li>
+      <li><%= t('Enter the code that arrives in your Telegram app (and your cloud password, if you set one).') %></li>
+    </ol>
+    <form method="post" action="/settings/telegram/start" autocomplete="off">
+      <input type="hidden" name="_csrf" value="<%= csrf %>">
+      <div class="links tg">
+        <span class="muted"><%= t('Label (optional)') %></span><span class="muted">api_id</span><span class="muted">api_hash</span><span class="muted"><%= t('Phone') %></span>
+        <input name="label" placeholder="<%= t('e.g. oman') %>">
+        <input name="api_id" inputmode="numeric" required>
+        <input name="api_hash" required>
+        <input name="phone" type="tel" placeholder="+96871113813" required>
+      </div>
+      <button><%= t('Get code') %></button>
+    </form>
+  </details>
+  <% } %>
+</section>
+<% } %>
+
 <section class="card">
   <h2><%= t('What can the AI do?') %></h2>
   <p class="muted"><%= t('Applies to every mailbox of this connection.') %></p>

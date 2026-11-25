@@ -86,6 +86,46 @@ const RU: Record<string, string> = {
   'Use letters, digits, dot, dash or underscore.': 'Используйте буквы, цифры, точку, дефис или подчёркивание.',
   'This label is already used.': 'Такая метка уже есть.',
   'Enter the new password.': 'Введите новый пароль.',
+  // telegram
+  'Your own Telegram accounts. The AI reads chats without marking them as read; it can send only where you allow it below and only with full access.':
+    'Ваши аккаунты Telegram. ИИ читает чаты, не помечая их прочитанными; отправлять может только там, где вы разрешили ниже, и только при полном доступе.',
+  'Account': 'Аккаунт',
+  'Sending': 'Отправка',
+  'allowed': 'разрешена',
+  'off': 'выключена',
+  'Turn off': 'Выключить',
+  'Allow': 'Разрешить',
+  'Disconnect Telegram account {label}? The stored session is deleted; your Telegram account is not touched.':
+    'Отключить аккаунт Telegram {label}? Сохранённая сессия удалится, сам аккаунт Telegram не изменится.',
+  'Telegram sent a code to your Telegram app for {phone}. Enter it here.': 'Telegram отправил код в приложение Telegram для {phone}. Введите его здесь.',
+  'Code': 'Код',
+  'Cancel': 'Отмена',
+  'This account has two-step verification. Enter your Telegram cloud password.':
+    'У аккаунта включена двухэтапная проверка. Введите облачный пароль Telegram.',
+  'hint': 'подсказка',
+  'Cloud password': 'Облачный пароль',
+  'Connect a Telegram account': 'Подключить аккаунт Telegram',
+  'Open my.telegram.org, sign in with the phone number of the account, choose "API development tools" and create an app (any name).':
+    'Откройте my.telegram.org, войдите по номеру этого аккаунта, выберите «API development tools» и создайте приложение (название любое).',
+  'Copy api_id and api_hash into the form below and press "Get code".': 'Скопируйте api_id и api_hash в форму ниже и нажмите «Получить код».',
+  'Enter the code that arrives in your Telegram app (and your cloud password, if you set one).':
+    'Введите код, который придёт в приложение Telegram (и облачный пароль, если он задан).',
+  'Phone': 'Телефон',
+  'e.g. oman': 'напр. oman',
+  'Get code': 'Получить код',
+  'Copy api_id (digits) and api_hash (32 characters) from my.telegram.org → API development tools.':
+    'Скопируйте api_id (цифры) и api_hash (32 символа) с my.telegram.org → API development tools.',
+  'The phone number is not valid. Use international format, e.g. +96871113813.': 'Неверный номер. Укажите в международном формате, например +96871113813.',
+  'Too many Telegram sign-in attempts. Try again in 15 minutes.': 'Слишком много попыток входа в Telegram. Попробуйте через 15 минут.',
+  'The sign-in expired. Start again to get a new code.': 'Время входа истекло. Начните заново, чтобы получить новый код.',
+  'Enter the code Telegram sent to your app.': 'Введите код, который Telegram прислал в приложение.',
+  'Enter your Telegram two-step verification password.': 'Введите облачный пароль Telegram.',
+  'Telegram did not respond. Try again shortly.': 'Telegram не ответил. Попробуйте чуть позже.',
+  'The code is wrong. Check it and try again.': 'Неверный код. Проверьте и попробуйте снова.',
+  'The code expired. Start again to get a new one.': 'Код устарел. Начните заново, чтобы получить новый.',
+  'The two-step verification password is wrong.': 'Неверный облачный пароль.',
+  'Telegram rejected the api_id / api_hash. Copy them again from my.telegram.org.': 'Telegram не принял api_id / api_hash. Скопируйте их заново с my.telegram.org.',
+  'This phone number has no Telegram account.': 'На этот номер нет аккаунта Telegram.',
   // permissions
   'What can the AI do?': 'Что может ИИ?',
   'Applies to every mailbox of this connection.': 'Действует для всех ящиков этого подключения.',

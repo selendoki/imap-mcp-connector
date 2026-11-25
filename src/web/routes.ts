@@ -6,6 +6,7 @@ import { mcpUrl } from '../config.js';
 import { encryptSecret } from '../crypto.js';
 import { addLink, countLinks, findLink, listLinks, ownerLabel, purgeOrphanedLinked, removeLink, renameLink, uniqueLabel } from '../db/links.js';
 import { listActiveGrants, revokeUserGrant } from '../db/oauth.js';
+import { listTelegramAccounts, maskPhone } from '../db/telegram.js';
 import { deleteUser, serverSettingsOf, setPermissionLevel, updateSmtpSettings, type User } from '../db/users.js';
 import { GuardError } from '../guard.js';
 import { log } from '../log.js';
@@ -15,6 +16,7 @@ import type { MailServerSettings, PermissionLevel, Security } from '../types.js'
 import { csrfToken, verifyCsrf } from './csrf.js';
 import { LEVELS } from './levels.js';
 import { requireUser, safeNext } from './middleware.js';
+import type { TelegramView } from './telegram.js';
 
 type Body = Record<string, string | undefined>;
 const SECURITIES: Security[] = ['tls', 'starttls', 'none'];
@@ -73,6 +75,43 @@ interface LinkResult {
 /** Inbox counts per account id, from "Check all mailboxes". */
 type Checks = Record<number, { total: number; unread: number } | { error: string; auth: boolean }>;
 
+export interface SettingsRenderOptions {
+  error?: string | null;
+  status?: number;
+  linkResults?: LinkResult[];
+  checks?: Checks | null;
+  telegram?: TelegramView | null;
+  telegramError?: string | null;
+}
+export type SettingsRenderer = (req: Request, res: Response, opts?: SettingsRenderOptions) => void;
+
+export function settingsRenderer(deps: AppDeps): SettingsRenderer {
+  return (req, res, opts = {}) => {
+    const user = res.locals.user as User;
+    res.status(opts.status ?? 200).render('settings', {
+      title: 'Settings',
+      user,
+      ownerLabel: ownerLabel(user),
+      mailboxes: listLinks(deps.db, user.id),
+      maxMailboxes: deps.config.maxLinkedMailboxes,
+      linkRows: LINK_ROWS,
+      linkResults: opts.linkResults ?? [],
+      checks: opts.checks ?? null,
+      telegramEnabled: Boolean(deps.telegramFactory),
+      telegramAccounts: listTelegramAccounts(deps.db, user.id).map((a) => ({ ...a, phoneMasked: maskPhone(a.phone) })),
+      telegram: opts.telegram ?? null,
+      telegramError: opts.telegramError ?? null,
+      csrf: csrfToken(req),
+      connectorUrl: mcpUrl(deps.config).href,
+      grants: listActiveGrants(deps.db, user.id, Date.now()),
+      levels: LEVELS,
+      saved: typeof req.query.saved === 'string' ? req.query.saved : null,
+      welcome: req.query.welcome === '1',
+      error: opts.error ?? null,
+    });
+  };
+}
+
 function renderSettings(
   deps: AppDeps,
   req: Request,
@@ -82,24 +121,7 @@ function renderSettings(
   linkResults: LinkResult[] = [],
   checks: Checks | null = null,
 ): void {
-  const user = res.locals.user as User;
-  res.status(status).render('settings', {
-    title: 'Settings',
-    user,
-    ownerLabel: ownerLabel(user),
-    mailboxes: listLinks(deps.db, user.id),
-    maxMailboxes: deps.config.maxLinkedMailboxes,
-    linkRows: LINK_ROWS,
-    linkResults,
-    checks,
-    csrf: csrfToken(req),
-    connectorUrl: mcpUrl(deps.config).href,
-    grants: listActiveGrants(deps.db, user.id, Date.now()),
-    levels: LEVELS,
-    saved: typeof req.query.saved === 'string' ? req.query.saved : null,
-    welcome: req.query.welcome === '1',
-    error,
-  });
+  settingsRenderer(deps)(req, res, { error, status, linkResults, checks });
 }
 
 export function webRouter(deps: AppDeps): Router {

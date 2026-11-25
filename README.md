@@ -57,6 +57,8 @@ Lost it? Create a new one and sign in again. The stored password is replaced.
 | `LINKED_EMAIL_DOMAINS` | no | Extra email domains that can only be **linked** to a signed-in account (see Linked mailboxes), never used to sign in. |
 | `LINKED_IMAP_HOSTS` | no | Extra IMAP hosts allowed for linked mailboxes only, e.g. `imap.gmail.com,imap.mail.me.com`. |
 | `MAX_LINKED_MAILBOXES` | no (`20`) | Linked mailboxes per account. |
+| `UI_LANG` | no (`en`) | Language of the web pages: `en` or `ru`. |
+| `TELEGRAM_ENABLED` | no (`false`) | `true` lets signed-in users connect their own Telegram accounts (see Telegram). |
 | `ALLOW_PRIVATE_HOSTS` | no (`false`) | Allow mail servers on private networks and unencrypted connections. |
 | `DEFAULT_SEND_LIMIT_PER_HOUR` | no (`20`) | Emails each user's AI may send per hour. |
 | `DATA_DIR` | no (`/data`) | Where the SQLite database lives. |
@@ -87,6 +89,14 @@ One connection can cover several mailboxes. After signing in, open **Settings �
 - Mailboxes on the signed-in domain that publish no settings reuse the signed-in account's server, which must be listed in `ALLOWED_IMAP_HOSTS`.
 - Domains in `LINKED_EMAIL_DOMAINS` (e.g. `gmail.com`) can be linked but never used to sign in, so strangers cannot create accounts on your instance.
 - Removing a link (or deleting the account) deletes the stored credentials of mailboxes that were only ever linked.
+
+## Telegram
+
+With `TELEGRAM_ENABLED=true`, **Settings → Telegram** connects the user's own Telegram accounts (MTProto via GramJS, not a bot): enter `api_id`/`api_hash` from my.telegram.org and the phone number, then the code Telegram sends to the app and, if set, the cloud password. Only the session string and `api_hash` are stored, encrypted with `ENCRYPTION_KEY`; codes and passwords are never stored.
+
+- Tools (registered only for accounts that connected Telegram): `telegram_list_chats`, `telegram_read`, `telegram_search` (read level; nothing is marked as read) and `telegram_send` (full level **and** a per-account "allow sending" switch, off by default).
+- Message text is wrapped as untrusted content, like email.
+- A session revoked in Telegram (Settings → Devices) marks the account for a new sign-in.
 
 ## Tools the AI gets
 

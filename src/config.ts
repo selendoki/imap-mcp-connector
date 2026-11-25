@@ -13,6 +13,8 @@ export interface Config {
   maxLinkedMailboxes: number;
   /** Language of the web pages: 'en' (default) or 'ru'. */
   uiLang: Lang;
+  /** TELEGRAM_ENABLED=true lets signed-in users connect Telegram accounts. */
+  telegramEnabled: boolean;
   allowPrivateHosts: boolean;
   defaultSendLimitPerHour: number;
   dataDir: string;
@@ -82,6 +84,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     linkedImapHosts: list(env.LINKED_IMAP_HOSTS),
     maxLinkedMailboxes: positiveInt('MAX_LINKED_MAILBOXES', env.MAX_LINKED_MAILBOXES, 20),
     uiLang: parseLang(env.UI_LANG),
+    telegramEnabled: env.TELEGRAM_ENABLED === 'true',
     allowPrivateHosts: env.ALLOW_PRIVATE_HOSTS === 'true',
     defaultSendLimitPerHour: positiveInt('DEFAULT_SEND_LIMIT_PER_HOUR', env.DEFAULT_SEND_LIMIT_PER_HOUR, 20),
     dataDir: env.DATA_DIR || '/data',

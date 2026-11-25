@@ -12,6 +12,8 @@ import { log } from './log.js';
 import { verifyImapLogin } from './mail/imap.js';
 import { MailPool } from './mail/pool.js';
 import { defaultSmtpFactory } from './mail/smtp.js';
+import { gramjsFactory } from './telegram/gramjs.js';
+import { TelegramPool } from './telegram/pool.js';
 
 function loadConfigOrExit(): Config {
   try {
@@ -31,6 +33,7 @@ const db = openDb(path.join(config.dataDir, 'imap-connector.db'));
 // Re-check stored settings on every new connection, so allowlist or DNS changes apply to existing users.
 const mailGuard = (u: User) => guardStoredUser(config, u);
 const pool = new MailPool({ db, key: config.encryptionKey, signInUrl: signInUrl(config), guard: mailGuard });
+const telegram = config.telegramEnabled ? new TelegramPool({ db, key: config.encryptionKey, factory: gramjsFactory }) : undefined;
 
 const app = createApp({
   config,
@@ -42,6 +45,8 @@ const app = createApp({
   verifyImap: (target, password) => verifyImapLogin(target, password),
   guard: (email, settings, linked) => guardMailSettings(config, email, settings, undefined, linked),
   mailGuard,
+  telegram,
+  telegramFactory: telegram ? gramjsFactory : undefined,
 });
 
 purgeExpired(db, Date.now());
@@ -62,6 +67,7 @@ function shutdown(): void {
   });
   closed
     .then(() => pool.closeAll())
+    .then(() => telegram?.closeAll())
     .then(() => {
       db.close();
       process.exit(0);

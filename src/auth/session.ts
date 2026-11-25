@@ -5,6 +5,8 @@ declare module 'express-session' {
   interface SessionData {
     userId?: number;
     csrfToken?: string;
+    /** Id of a Telegram sign-in in progress (see web/telegram.ts). */
+    tgPending?: string;
   }
 }
 

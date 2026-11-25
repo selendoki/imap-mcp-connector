@@ -13,10 +13,13 @@ import type { PinnedAddresses } from './guard.js';
 import { log } from './log.js';
 import type { MailPool } from './mail/pool.js';
 import type { SmtpFactory } from './mail/smtp.js';
+import type { TelegramPool } from './telegram/pool.js';
+import type { TelegramFactory } from './telegram/types.js';
 import { mcpRouter } from './mcp/http.js';
 import { consentRouter } from './web/consent.js';
 import { translator } from './web/i18n.js';
-import { webRouter } from './web/routes.js';
+import { settingsRenderer, webRouter } from './web/routes.js';
+import { telegramRouter } from './web/telegram.js';
 
 export interface AppDeps {
   config: Config;
@@ -29,6 +32,9 @@ export interface AppDeps {
   guard: LoginDeps['guard'];
   /** Re-checks a stored user's mail settings before SMTP connections (IMAP is guarded by the pool). */
   mailGuard?: (user: User) => Promise<PinnedAddresses | void>;
+  /** Telegram support: the pool for tools and the factory for sign-in. Both absent disables it. */
+  telegram?: TelegramPool;
+  telegramFactory?: TelegramFactory;
 }
 
 const VIEWS_DIR = fileURLToPath(new URL('../views', import.meta.url));
@@ -112,6 +118,7 @@ export function createApp(deps: AppDeps): express.Express {
   );
   app.use(express.urlencoded({ extended: false, limit: '100kb' }));
   app.use(webRouter(deps));
+  app.use(telegramRouter(deps, settingsRenderer(deps)));
   app.use(consentRouter(deps));
   app.use((_req, res) => {
     res.status(404).render('error', { title: 'Not found', message: 'This page does not exist.' });

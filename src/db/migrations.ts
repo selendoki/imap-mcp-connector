@@ -96,4 +96,22 @@ export const migrations: string[] = [
   );
   CREATE INDEX mailbox_links_member ON mailbox_links(member_id);
   `,
+  // Telegram accounts signed in by an owner. The session string and api_hash are encrypted like mail passwords.
+  `
+  CREATE TABLE telegram_accounts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    owner_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    label TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    api_id INTEGER NOT NULL,
+    api_hash_enc TEXT NOT NULL,
+    session_enc TEXT NOT NULL,
+    display_name TEXT,
+    allow_send INTEGER NOT NULL DEFAULT 0,
+    needs_reauth INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    UNIQUE (owner_id, label),
+    UNIQUE (owner_id, phone)
+  );
+  `,
 ];

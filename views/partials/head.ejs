@@ -44,8 +44,12 @@
   details.card summary { margin-top: 0; }
   .inline-h { display: inline; font-size: 1.17em; }
   ul.results { list-style: none; padding: 0; margin: 8px 0; } ul.results li { padding: 6px 0; border-bottom: 1px dashed var(--border); }
+  .links.tg { grid-template-columns: 1fr 1fr 2fr 1.4fr; }
+  .inline-toggle { display: flex; align-items: center; gap: 8px; } .small-btn { margin-top: 0; padding: 3px 10px; font-size: 13px; }
+  .tg-step { border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; margin: 12px 0; }
+  ol.steps { padding-left: 20px; } ol.steps li { margin: 4px 0; }
   .links { display: grid; grid-template-columns: 1fr 2fr 2fr; gap: 6px 8px; align-items: end; }
-  @media (max-width: 480px) { .links { grid-template-columns: 1fr; } }
+  @media (max-width: 480px) { .links, .links.tg { grid-template-columns: 1fr; } }
   h3 { font-size: 16px; margin: 20px 0 4px; }
   .row { display: grid; grid-template-columns: 2fr 1fr 1fr; gap: 8px; }
   @media (max-width: 480px) { .row { grid-template-columns: 1fr; } }
